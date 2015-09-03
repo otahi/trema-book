@@ -1,0 +1,1018 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?asciidoc-toc?>
+<?asciidoc-numbered?>
+<!DOCTYPE book [<!ENTITY % db5ent PUBLIC "-//FOPUB//ENTITIES Entities for DocBook 5" "db5.ent"> %db5ent;]>
+<book xmlns="http://docbook.org/ns/docbook" xmlns:xlink="http://www.w3.org/1999/xlink" version="5.0" xml:lang="en">
+<info>
+<title>TremaでOpenFlowプログラミング</title>
+<date>2015-09-03</date>
+<authorgroup>
+<author>
+<personname>
+<firstname>高宮</firstname>
+<surname>安仁</surname>
+</personname>
+<email>yasuhito@gmail.com</email>
+</author>
+<author>
+<personname>
+<firstname>鈴木</firstname>
+<surname>一哉</surname>
+</personname>
+</author>
+<author>
+<personname>
+<firstname>松井</firstname>
+<surname>暢之</surname>
+</personname>
+</author>
+<author>
+<personname>
+<firstname>村木</firstname>
+<surname>暢哉</surname>
+</personname>
+</author>
+<author>
+<personname>
+<firstname>山崎</firstname>
+<surname>泰宏</surname>
+</personname>
+</author>
+</authorgroup>
+</info>
+<chapter xml:id="_openflowの仕組み">
+<title>OpenFlowの仕組み</title>
+<simpara>近ごろ話題のOpenFlowって、どんな仕組みで何がうれしいのでしょうか? 難しいネットワーク用語を使わずに、身近な話で解説します。</simpara>
+<informalfigure>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/how_does_openflow_work/incredible_machine.png"/>
+</imageobject>
+<textobject><phrase>incredible machine</phrase></textobject>
+</mediaobject>
+</informalfigure>
+<section xml:id="_ソフトウェアで思いどおりにコントロール">
+<title>ソフトウェアで思いどおりにコントロール</title>
+<blockquote>
+<attribution>
+Larry Wall
+<citetitle>『プログラミングPerl』(オーム社)</citetitle>
+</attribution>
+<simpara>無精 (Laziness): エネルギーの総支出を減らすために、多大な努力をするように、あなたをかりたてる性質。こうして労力を省くために書いたプログラムは他人も使うようになり、そのプログラムに関する質問にいちいち答えずに済ますためにドキュメントを書くようになる。それゆえ、プログラマにとって最も重要な素質である。またそれゆえ、この本が存在するのである。</simpara>
+</blockquote>
+<simpara>優れたプログラマが持つハッカー気質の1つに「無精」があります。大好きなコンピュータの前から一時も離れずに、どうやってジャンクフードを手に入れるか……普通の人からするとただの横着に見えるかもしれませんが、ハッカー達にとってそれはいつでも大きな問題でした。</simpara>
+<simpara>ソフトウェアによる横着はハッカーが最も創造性を発揮する分野の一つです。時間のかかる仕事も、うまく技術を駆使すれば自動化してさっと終わらせることができるのです。</simpara>
+<orderedlist numeration="arabic">
+<listitem>
+<simpara>ハッカーの巣窟として有名なMITのAIラボにはかつて、コンピュータからオンラインでピザを注文できるUNIXコマンドが存在しました<footnote><simpara>MITのxpizzaコマンドのマニュアル：https://stuff.mit.edu/afs/sipb/project/lnf/other/CONTRIB/ai-info</simpara></footnote>。ハックしていて腹が減ったらコマンドをたたいてピザを取る、なんとも横着です。</simpara>
+</listitem>
+<listitem>
+<simpara>コンピュータサイエンスの名門、カーネギーメロン大学にはコーク・マシンという変わったコーラ自販機がかつてあり、UNIXコマンド一発でコーラの冷え具合を確認できるようになっていました<footnote><simpara>カーネギーメロン大のコーク・マシンのサイト：http://www.cs.cmu.edu/~coke/</simpara></footnote>。遠くの自販機まで行って<emphasis role="strong">ぬるい</emphasis>コーラをつかまされないための工夫です。</simpara>
+</listitem>
+<listitem>
+<simpara>RFC (Request For Comment) で標準化されているコーヒーポットプロトコルでは、遠隔地にあるコーヒーポットのコーヒーの量を監視したり、コーヒーを自動的にいれたりするための半分冗談のインターフェースを定義しています<footnote><simpara>RFC 2324：https://www.ietf.org/rfc/rfc2324.txt</simpara></footnote>。本当に実装してしまった人もいたそうですから驚きです。</simpara>
+</listitem>
+</orderedlist>
+<simpara>こうした「ソフトウェアで楽をする」ハックのうち、もっとも大規模な例が最新鋭のデータセンターです。クラウドサービスの裏で動くデータセンターは極めて少人数のエンジニアが運用しており、大部分の管理作業をソフトウェアによって極限まで自動化している、という記事を呼んだことのある人も多いでしょう。このようにピザやコーラ、コーヒーのようなお遊びから、データセンターのように一筋縄ではいかない相手まで、ソフトウェアで「モノ」を思いどおりにコントロールするのは何よりも楽しく、そして実際に役立つハックの一種です。</simpara>
+<note>
+<simpara>こうした最新鋭データセンターでのネットワーク管理自動化の仕組みは第15章および第16章で解説します。</simpara>
+</note>
+</section>
+<section xml:id="_sdn_ネットワークをソフトウェアで制御しよう">
+<title>SDN: ネットワークをソフトウェアで制御しよう</title>
+<simpara>その中でもネットワークをハックする技術の1つが、本書で取り上げるOpenFlowです。簡単に言えば、OpenFlowとはネットワークスイッチの動作を制御するための標準プロトコルの1つです。OpenFlowを使えばスイッチ1つひとつの動作をソフトウェアから自由に書き換えられるので、究極的にはネットワーク全体の動作をソースコードとして記述できます。これをSoftware Defined Networking(SDN、ソフトウェアで定義されるネットワーク)と呼び、OpenFlowはSDNを実現する代表的な技術として注目を集めています。</simpara>
+<simpara>OpenFlowの登場によって、これからはネットワークもプログラミングの対象になります。「いまだに手で管理してるの?そんなのソフトウェアで自動化しようぜ!」ハッカー達のこんな声が聞こえてきそうです。たしかに、今までネットワーク管理と言えば専門のオペレータ達による手作業がメインでした。横着できる部分はたくさんあるはずです。</simpara>
+<simpara>ハッカーに負けない創造性とOpenFlowのプログラマブルな特性が組み合わされば、次のような「究極の自動化」も夢ではなくなります。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>障害やトラフィック情報など、あらゆる情報を収集し集中管理できるネットワーク</simpara>
+</listitem>
+<listitem>
+<simpara>ユーザやアプリケーションの追加・削除に応じて、自動的に構成を変更するネットワーク</simpara>
+</listitem>
+<listitem>
+<simpara>追加投資をしなくても、既存のインフラを目一杯まで使ってスケールするネットワーク</simpara>
+</listitem>
+</itemizedlist>
+<simpara>本書はこれらすべてのトピックを扱います。自宅や職場のような中小規模ネットワークからデータセンターのような超大規模ネットワークまで、具体的なOpenFlowの適用例を見ながら「OpenFlowってどんなもので、具体的に何に使えるのだろう?」という素朴な疑問に答えます。また「さっそくOpenFlowを使ってすごいネットークを作ってみたい!」というプログラマ向けには、実際に動かせる実用的なコードをたくさん載せました。</simpara>
+<simpara>本書を読み進めるにあたって、ネットワークやプログラミングの深い知識は不要です。基本から1つひとつ説明しますので、ネットワークの専門家はもちろん、プログラマやシステムエンジニア、そして営業職や管理職などなどOpenFlowに興味を持つ方であれば誰でもすんなり理解できるように構成してあります。ではさっそく、OpenFlowの仕組みを理解しましょう。</simpara>
+</section>
+<section xml:id="_openflowの仕組み_2">
+<title>OpenFlowの仕組み</title>
+<simpara>OpenFlowの仕組みを理解するために、ちょっとした<emphasis role="strong">たとえ話</emphasis>から始めましょう。みなさんもきっと利用したことがあると思いますが、よくあるカスタマーサポートを思い浮かべてください。そう、テレビとかパソコンの調子が悪くなったときに、フリーダイヤルで相談するアレです。それって、どこがOpenFlowと関係あるのでしょう?</simpara>
+<simpara>実はOpenFlowの基本的な仕組みはカスタマーサポートにとてもよく似ているのです。これからお話しするストーリーが分かれば、OpenFlowの95%を理解できたも同然です。それではさっそく、このストーリーの主人公の友太郎(ゆうたろう)君と、カスタマーサポートセンターで働く青井さん、そして上司の宮坂主任の3人に登場してもらいましょう。</simpara>
+<section xml:id="_エアコンが壊れた">
+<title>エアコンが壊れた</title>
+<simpara>今年もエアコンの活躍する季節がやってきました。ところが友太郎君のエアコンはどうにも調子がよくありません。そこで取扱説明書に載っていたカスタマーサポートに電話することにしました。自動音声に従って問題ありそうな項目をすべてチェックしてみましたが、いっこうに解決しません。結局、自動音声はあきらめて電話サポートに相談することになりました。</simpara>
+<simpara>「はい、こちらカスタマーサポートセンターです。担当はわたくし青井がうけたまわります。ご要件は何でしょうか?」</simpara>
+<simpara>青井さんはヨーヨーダイン・エアコン社で働く電話オペレータです。お客さんから不具合の症状を聞き出し, 症状の内容に応じてそれぞれの担当サポートに電話をつなぎます(<link linkend="yoyodyne_support">図1-1</link>)。</simpara>
+<figure xml:id="yoyodyne_support">
+<title>電話サポートはお客さんからの問い合わせを適切な担当サポートへ転送</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/how_does_openflow_work/yoyodyne_support.png"/>
+</imageobject>
+<textobject><phrase>yoyodyne support</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>「なんだかリモコンの調子が悪いんです。温度表示がずっと点滅してるんですけど、どうしたら直りますか?」</simpara>
+<simpara>青井さんは手元の対応マニュアルを開きます (<link linkend="operator_manual">表1-1</link>)。対応マニュアルには問い合わせ内容と、それを直せる担当サポートが載っています。続く数字はそれぞれの問い合わせ件数です。</simpara>
+<table xml:id="operator_manual" frame="all" rowsep="1" colsep="1">
+<title>表1-1 電話サポート用対応マニュアル</title>
+<tgroup cols="3">
+<colspec colname="col_1" colwidth="33*"/>
+<colspec colname="col_2" colwidth="33*"/>
+<colspec colname="col_3" colwidth="33*"/>
+<thead>
+<row>
+<entry align="left" valign="top">問い合わせ内容</entry>
+<entry align="left" valign="top">対応方法</entry>
+<entry align="left" valign="top">問い合わせ件数</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry align="left" valign="top"><simpara>リモコンの不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>8 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>エアコン本体の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>エアコン担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>6 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>室外機の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>4 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>いたずら電話</simpara></entry>
+<entry align="left" valign="top"><simpara>電話を切る</simpara></entry>
+<entry align="left" valign="top"><simpara>2 件</simpara></entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+<simpara>ちょうどマニュアルの先頭に探していた項目がみつかりました。</simpara>
+<simpara>「ご不便をおかけしました。担当のサポートにただいまおつなぎいたします」</simpara>
+<simpara>電話の転送を終えると、青井さんはリモコン不調の問い合わせ件数を8件から9件にアップデートしました(<link linkend="operator_manual_update">表1-2</link>)。</simpara>
+<table xml:id="operator_manual_update" frame="all" rowsep="1" colsep="1">
+<title>表1-2 問い合わせ件数をアップデートする</title>
+<tgroup cols="3">
+<colspec colname="col_1" colwidth="33*"/>
+<colspec colname="col_2" colwidth="33*"/>
+<colspec colname="col_3" colwidth="33*"/>
+<thead>
+<row>
+<entry align="left" valign="top">問い合わせ内容</entry>
+<entry align="left" valign="top">対応方法</entry>
+<entry align="left" valign="top">問い合わせ件数</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry align="left" valign="top"><simpara>リモコンの不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara><emphasis role="strong">9 件</emphasis></simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>エアコン本体の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>エアコン担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>6 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>室外機の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>4 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>いたずら電話</simpara></entry>
+<entry align="left" valign="top"><simpara>電話を切る</simpara></entry>
+<entry align="left" valign="top"><simpara>2 件</simpara></entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+<simpara>こうすることでどんな問い合わせが多いかを社内にフィードバックできます。たとえばリモコンに関する問い合わせが多ければ、開発部署は次の製品開発にこの情報を生かしリモコンの改良をできますし、サポート部署は周辺機器担当のサポートメンバーを増やすという判断ができます。</simpara>
+</section>
+<section xml:id="_これをopenflowに置き換えると">
+<title>これをOpenFlowに置き換えると…</title>
+<simpara>OpenFlowの世界では、パケットを送信するホストがお客さんの友太郎君、パケットを転送するOpenFlowスイッチが電話オペレータの青井さんに対応します(<link linkend="openflow_host_switch">図1-2</link>)。ホストがパケットを送ると、OpenFlowスイッチはパケットの中身に応じてパケットを適切に処理します。これはちょうど、青井さんが友太郎君からの問い合わせ内容に応じて適切な担当サポートに電話を転送するのと同じです。</simpara>
+<figure xml:id="openflow_host_switch">
+<title>OpenFlowではホストがお客さん、スイッチが電話サポートセンター、そしてフローテーブルがマニュアルに対応</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/how_does_openflow_work/openflow_host_switch.png"/>
+</imageobject>
+<textobject><phrase>openflow host switch</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>OpenFlowスイッチは、その動作が「マニュアル化」されています。カスタマーサポートの例では、青井さんはマニュアルから対応方法を調べました。OpenFlowスイッチは、パケットの処理方法をスイッチ内のフローテーブルと呼ぶデータベースを参照して決めます。青井さんの業務がすべマニュアル化されているのと同じく、OpenFlowスイッチの動作はすべてこのフローテーブルの中身によって決まります。</simpara>
+</section>
+<section xml:id="_パケット処理内容を管理するフローテーブル">
+<title>パケット処理内容を管理するフローテーブル</title>
+<simpara>フローテーブルには、「こういうパケットが届いたら、こう処理する」というルールがいくつか記録されています。このルールをフローエントリと呼びます。フローエントリはちょうど「リモコンの故障に関する問い合わせが来たら、リモコン担当サポートに電話を転送する」といったマニュアルの各項目に対応します。</simpara>
+<simpara>実際のフローテーブルの例を見てみましょう。<link linkend="flow_table_entry">表1-3</link>はあるスイッチのフローテーブルで、各行が1つひとつのフローエントリに対応します。フローエントリは主にマッチフィールド、インストラクション、そしてカウンタの3つの要素から成ります。</simpara>
+<table xml:id="flow_table_entry" frame="all" rowsep="1" colsep="1">
+<title>表1-3 フローテーブルとフローエントリの例</title>
+<tgroup cols="3">
+<colspec colname="col_1" colwidth="33*"/>
+<colspec colname="col_2" colwidth="33*"/>
+<colspec colname="col_3" colwidth="33*"/>
+<thead>
+<row>
+<entry align="left" valign="top">マッチフィールド</entry>
+<entry align="left" valign="top">インストラクション</entry>
+<entry align="left" valign="top">カウンタ</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry align="left" valign="top"><simpara>送信元IPアドレス = 192.168.1.00</simpara></entry>
+<entry align="left" valign="top"><simpara>ポート8番に転送</simpara></entry>
+<entry align="left" valign="top"><simpara>80パケット</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>VLAN ID = 10</simpara></entry>
+<entry align="left" valign="top"><simpara>ポート10番に転送</simpara></entry>
+<entry align="left" valign="top"><simpara>64パケット</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>送信元MACアドレス = 00:50:56:c0:00:08</simpara></entry>
+<entry align="left" valign="top"><simpara>VLAN ID = 2 を付けてポート8番に転送</simpara></entry>
+<entry align="left" valign="top"><simpara>24パケット</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>送信元IPアドレス = 27.55.0.0/16</simpara></entry>
+<entry align="left" valign="top"><simpara>パケットを破棄</simpara></entry>
+<entry align="left" valign="top"><simpara>10 パケット</simpara></entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+<itemizedlist>
+<listitem>
+<simpara>マッチフィールド: マッチフィールドは届いたパケットに対応するフローエントリを探すための「条件」として使われます。たとえば「リモコンの調子がおかしい」という問い合わせから対応方法を決めたように、パケットの特徴に合うマッチフィールドから処理方法、つまりインストラクションを決めます。</simpara>
+</listitem>
+<listitem>
+<simpara>インストラクション: インストラクションは届いたパケットをどう処理するかという「処理方法」にあたります。たとえば「リモコン担当サポートへ引き継ぎ」と同じく、インストラクションには「スイッチのポート8番に転送」などと指定します。また転送だけでなく、パケットの書き換えや破棄もインストラクションで実行できます。</simpara>
+</listitem>
+<listitem>
+<simpara>カウンタ: カウンタはフローエントリごとのパケット処理量の記録です。たとえば「リモコン関連の問い合わせ数は9件」とマニュアルに記録したように、「このフローエントリに従って処理したパケットは80個」などといった情報が書き込まれます。</simpara>
+</listitem>
+</itemizedlist>
+<simpara>いかがでしょうか?カスタマーサポートとOpenFlowはよく似ていることがわかると思います。実はOpenFlowはとても単純で理解しやすい仕組みなのです。</simpara>
+</section>
+<section xml:id="_エアコンがまたまた故障">
+<title>エアコンがまたまた故障</title>
+<simpara>エアコンもしばらくは順調でしたが、1ヶ月後また調子が悪くなってしまいました。友太郎君は再びカスタマーサポートへダイヤルします。</simpara>
+<simpara>「エアコンの排水ホースがすぐ詰まっちゃうんです」</simpara>
+<simpara>青井さんはいつものように手元の対応マニュアルを調べましたが、困ったことに排水ホースの項目は載っていません。どうやらまったく新しい不具合のようです。</simpara>
+<simpara>「すみませんが少々お待ちください。対応可能なサポートがいるかどうか確認いたします」</simpara>
+<simpara>そして電話口には録音された”しばらくお待ちください”のメッセージとどこか軽快な音楽が流れはじめました。</simpara>
+<figure xml:id="yoyodyne_support_miyasaka">
+<title>対応マニュアルに対処法が見つからなかった場合、上司に聞く</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/how_does_openflow_work/yoyodyne_support_miyasaka.png"/>
+</imageobject>
+<textobject><phrase>yoyodyne support miyasaka</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>こういう時、青井さんがいつも頼るのは上司の宮坂主任です(<link linkend="yoyodyne_support_miyasaka">図1-3</link>)。</simpara>
+<simpara>「宮坂さん、排水ホースについての問い合わせが着てるのですが、どのサポート担当につなげばよいですか?」</simpara>
+<simpara>「それだったら消耗品担当サポートだよ」</simpara>
+<simpara>転送先がわかった青井さんは友太郎君の待つ電話に戻ります。</simpara>
+<simpara>「大変お待たせいたしました。担当のサポートに転送いたします」</simpara>
+<simpara>一度目の問い合わせと比べてかなり時間がかかってしまいましたが、これでようやく一件落着です。さらに青井さんは、宮坂主任から教わった消耗品担当サポートの連絡先をマニュアルに追加します (<link linkend="operator_manual_add_row">表1-4</link>)。次からの同じ問い合わせにすばやく答えられるようにするためです。</simpara>
+<table xml:id="operator_manual_add_row" frame="all" rowsep="1" colsep="1">
+<title>表1-4 マニュアルに新しい症状と転送先を追加してアップデートップデートする</title>
+<tgroup cols="3">
+<colspec colname="col_1" colwidth="33*"/>
+<colspec colname="col_2" colwidth="33*"/>
+<colspec colname="col_3" colwidth="33*"/>
+<thead>
+<row>
+<entry align="left" valign="top">故障の箇所</entry>
+<entry align="left" valign="top">担当サポートの内線番号</entry>
+<entry align="left" valign="top">問い合わせ件数</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry align="left" valign="top"><simpara>リモコンの不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>9 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>エアコン本体の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>エアコン担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>6 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>室外機の不調</simpara></entry>
+<entry align="left" valign="top"><simpara>周辺機器担当サポートに転送</simpara></entry>
+<entry align="left" valign="top"><simpara>4 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>いたずら電話</simpara></entry>
+<entry align="left" valign="top"><simpara>電話を切る</simpara></entry>
+<entry align="left" valign="top"><simpara>2 件</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara><emphasis role="strong">排水ホースの不調</emphasis></simpara></entry>
+<entry align="left" valign="top"><simpara><emphasis role="strong">消耗品担当サポートに転送</emphasis></simpara></entry>
+<entry align="left" valign="top"><simpara><emphasis role="strong">1 件</emphasis></simpara></entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+<section xml:id="_これをopenflowに置き換えると_2">
+<title>これをOpenFlowに置き換えると…</title>
+<simpara>OpenFlowでこの上司にあたるのがコントローラと呼ばれるソフトウェアです(<link linkend="openflow_host_switch_controller">図1-4</link>)。OpenFlowでネットワークをプログラミングする場合、プログラマが書くのはこのコントローラの部分です。頭脳であるコントローラをソフトウェアとして記述することで、ネットワークを自由自在に制御できるというわけです。</simpara>
+<figure xml:id="openflow_host_switch_controller">
+<title>フローテーブルにパケットのエントリーが見つからなかった場合、コントローラに問い合わせる</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/how_does_openflow_work/openflow_host_switch_controller.png"/>
+</imageobject>
+<textobject><phrase>openflow host switch controller</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>フローテーブルに載っているパケットはスイッチが高速に転送してくれますが、フローテーブルに載っておらずスイッチ側でどう処理してよいかわかない予期せぬパケットが届くこともあります。この場合スイッチはこのパケットをコントローラに上げて「このパケットはどうすればよいですか?」と指示をあおぎます。コントローラはこのパケットの中身を調べ、どうすべきかという指示、つまり新しいフローエントリをフローテーブルに書き込んでやります。</simpara>
+<simpara>このようにフローテーブルに載っていないパケットが届くと、コントローラへの問い合わせが発生するのでパケット転送がとても遅くなります。しかし、スイッチの起動時にコントローラが必要なフローエントリをあらかじめ書き込んでおくようにしておけば、スイッチ側だけで素早く処理できます。</simpara>
+<note>
+<title>コントローラへの問い合わせはどのくらい遅い?</title>
+<simpara>フローテーブルを使わずに、毎回コントローラが指示を出すとどうなるでしょうか? 結果は、何倍も遅くなります。試しに手元の環境で簡単なプログラムを書き、ソフトウェアスイッチで転送する場合とコントローラですべて処理する場合を比べてみたところ、性能に5倍もの差が出ました。もちろんこれはおおざっぱな値ですが、数倍は遅くなるという目安になります。また今回の実験はソフトウェアスイッチでしたが、ハードウェアスイッチを使うとこの差はさらに広がります。</simpara>
+</note>
+</section>
+</section>
+</section>
+<section xml:id="_openflowのうれしさ">
+<title>OpenFlowのうれしさ</title>
+<simpara>OpenFlowの仕組みの大枠は理解できたと思います。それでは最も肝心な部分、「OpenFlowって何がうれしいの?」を掘り下げてみましょう。</simpara>
+<section xml:id="_自動化やシステム連携がしやすい">
+<title>自動化やシステム連携がしやすい</title>
+<simpara>カスタマーサポートセンターでは、あらかじめ適切なマニュアルを作っておけば業務はすべて電話サポートが自動的にやってくれます。これによって、全体の監督は管理職で実務は電話サポート、というふうにきっちりと分業できるようになります。たとえば電話サポートが実務をやってくれている間、管理職は他の部署との協業や調整に集中できます。</simpara>
+<simpara>同様に、OpenFlowスイッチの制御はすべてソフトウェアであるコントローラで実現しているので、ネットワーク管理の自動化が用意です。さらにコントローラがRubyやPython、Javaなどよく知られた汎用言語で書いてあれば、既存のシステムやサービスなどとの連携も簡単です。たとえば、アプリケーションからの要求やビジネスポリシーの変更、問題発生などさまざまなトリガーに応じてネットワークの設定を変更するといった、一歩進んだ自動化もできます。</simpara>
+<note>
+<simpara>システム連携の一例として、コントローラとWebサーバ(Sinatra)を連携してコントローラにREST APIを実装する方法を第14章で解説します。また、実際のデータセンターでのコントローラと外部サービスの連携については第15章および16章で紹介します。</simpara>
+</note>
+</section>
+<section xml:id="_ネットワークトラフィックを集中制御しやすい">
+<title>ネットワークトラフィックを集中制御しやすい</title>
+<simpara>カスタマーサポートセンターでは問い合わせ件数の情報はすべて管理職に上がってくるため、混み具合の把握や全体の交通整理が楽です。もし特定のサポートに問い合わせが集中しても、問い合わせがうまくばらけるようにマニュアルを通じて電話サポートの全員に指示できます。反対にもし各サポートが個々に判断してしまうと、おなじサポートに問い合わせが偏ることは避けられません。</simpara>
+<simpara>OpenFlowでもすべてのトラフィック情報はコントローラに上がってくるため、全体を見たトラフィックの最適化が可能です。各種カウンタを集計することで、コントローラはネットワーク全体のトラフィックデータを集められます。そしてその情報をもとに各スイッチのフローテーブルを更新することで、全体的に見て最適となるパケットの通り道を引けます。反対にもし個々のスイッチが判断してしまうと、うまくトラフィックを分散できません。</simpara>
+<note>
+<simpara>各種カウンタの収集方法については第4章で、またトラフィックの分散方法については第13章で解説します。</simpara>
+</note>
+</section>
+<section xml:id="_ソフトウェア開発のテクニックやツールが使える">
+<title>ソフトウェア開発のテクニックやツールが使える</title>
+<simpara>コントローラはソフトウェアの一種なので、ソフトウェア開発で長年培われているさまざまなテクニックやツールをネットワーク構築に応用できます。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>近年主流のアジャイル開発手法でコントローラを開発すれば、反復的な機能追加が可能。フィードバックを受けながら少しずつバージョンアップしてくことで、ネットワークを段階的に構築できる</simpara>
+</listitem>
+<listitem>
+<simpara>コントローラのユニットテストや受け入れテストを書くことで、ネットワーク全体を自動的にテストできる。テスト結果の出力は、そのまま仕様書の一部になる。ExcelやWordで書いた仕様書を別個に管理する必要はない</simpara>
+</listitem>
+<listitem>
+<simpara>コントローラのソースコードや関連データをgitなどのバージョン管理ツールで管理すれば、ネットワーク全体のバージョン管理やバージョン間の差分のチェック、および巻き戻しも可能</simpara>
+</listitem>
+</itemizedlist>
+<note>
+<simpara>アジャイルやソフトウェアテストによるコントローラ開発手法については第7章で解説します。</simpara>
+</note>
+</section>
+<section xml:id="_負荷上昇に対してスケールしやすい">
+<title>負荷上昇に対してスケールしやすい</title>
+<simpara>従来のネットワーク専用機器をOpenFlowコントローラで置き換えれば、負荷上昇への対応がより柔軟になります。従来のファイアウォールやルータ、スイッチ、ロードバランサといった専用ネットワーク機器では、負荷が上がった際にはワンランク上のハイエンドな機器との置き換え、つまり垂直方向のアップグレードしか選択肢がありませんでした。しかし、専用機器をコントローラとしてソフトウェア実装できれば、汎用サーバ上にほぼ同様の機能を実装できることになります。そして、汎用サーバを増やすだけで、つまり水平方向に増設するだけで負荷上昇に対応できます。これを一般にNFV(Network Functions Virtualization)と呼びます。</simpara>
+<note>
+<simpara>従来のファイアウォールやルータ、スイッチといった専用機器は、ベンダが提供する機能をそのまま使うしかありませんでした。たとえば、100個ある機能のうち、本当に使いたい機能は10個だけだったとしても、100機能付きのルータを買うしかありません。これではある意味、フルコースしか頼めないフレンチレストランのようなものです。一部の機能しか利用していないのに障害ポイントが無数にあるので、切り分けやデバッグが難航することもままあります。</simpara>
+<simpara>OpenFlowは回転ずしです。フランス料理の味に近づけるのは大変ですが、必要な機能だけをチョイスしてがんばって実装すれば、思い通りの機器が手に入るのです。</simpara>
+<simpara>こうしたネットワーク機器のOpenFlow実装については、パッチパネルを第5章で、スイッチを第6章で、ファイアウォールを第9章で、ルータを第10, 11章でそれぞれ解説します。</simpara>
+</note>
+</section>
+</section>
+<section xml:id="_openflowで気をつけること">
+<title>OpenFlowで気をつけること</title>
+<simpara>もちろん、OpenFlowでもうれしいことばかりではありません。コントローラで制御を一手に引き受けるというモデルになっているため、スイッチの台数が増えたときのコントローラの負荷に気をつける必要があります。もし、フローテーブルに載っていないパケットが一気にコントローラへ到着すると、パケットの配送が遅延するか最悪の場合コントローラが停止してしまいます。</simpara>
+<simpara>そこで、OpenFlowの使いどころやフローテーブルの残り容量にはとくに注意する必要があります。たとえばOpenFlowをインターネットのような多種多様のパケットが流れる環境につなげると、すぐにコントローラへの問い合わせが殺到しフローテーブルがいっぱいになって破綻してしまいます。しかしデータセンターなどの閉じた環境では、トラフィックの特徴や流れるパケットの種類はあらかじめ見当を付けておけます。そこで最低限のパケットのみがコントローラへ上がってくるようにうまくネットワークとフローエントリを設計することで、スイッチが増えてもスケールさせることができます。</simpara>
+</section>
+<section xml:id="_まとめ">
+<title>まとめ</title>
+<simpara>本章ではSDNを実現するための部品であるOpenFlowを解説しました。OpenFlowはフローテーブルを持つスイッチと、フローテーブルの内容を集中制御するソフトウェアであるコントローラから成ります。ネットワークの制御をソフトウェア化することによって、自動化やさざまななシステムとの連携、トラフィック制御のしやすさ、ソフトウェア技術の応用、ソフトウェアならではのスケーラビリティの高さ、などさまざまな恩恵があります。</simpara>
+<simpara>では、さっそくOpenFlowプログラミングを始めてみましょう!</simpara>
+</section>
+</chapter>
+<chapter xml:id="_hello_trema">
+<title>Hello, Trema!</title>
+<simpara>Trema(トレマ)を使うと楽しくSDNの世界が味わえます。これでいよいよあなたもOpenFlowプログラマの仲間入りです!</simpara>
+<section xml:id="_作ってわかるopenflow">
+<title>作ってわかるOpenFlow</title>
+<simpara>いよいよOpenFlowを使ってネットワークを実際にプログラムしていきます。職場や自宅のような小規模ネットワークでもすぐに試せるコードを通じてOpenFlowの世界を体験しましょう。実際に手を動かし実行してみれば「OpenFlowってどんな場面で使えるの？」というよくある疑問も徐々に氷解していくでしょう。</simpara>
+<simpara>実装はステップバイステップで進みます。どのステップも実用的な例となっており、最初はOpenFlowやプログラミングの基礎から始めます。そしてパッチパネルやL2スイッチ、ファイアウォール、ルータの実装など徐々に複雑な機能へとステップアップし、最終的にはデータセンターでも動く本格的な「ネットワーク仮想化」の実装を目標とします。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>Hello Trema (本章): OpenFlow 版 Hello World</simpara>
+</listitem>
+<listitem>
+<simpara>cbenchベンチマーク  (3章): OpenFlow のマイクロベンチマークツール</simpara>
+</listitem>
+<listitem>
+<simpara>スイッチ監視ツール (4章): スイッチのスペックや転送量のモニタリングツール</simpara>
+</listitem>
+<listitem>
+<simpara>パッチパネル (5章): ソフトウェアとして実装したインテリジェント・パッチパネル</simpara>
+</listitem>
+<listitem>
+<simpara>ラーニングスイッチ  (6章): レイヤ2スイッチをエミュレートするコントローラ</simpara>
+</listitem>
+<listitem>
+<simpara>テスト駆動開発 (7章): リピータハブのテスト駆動開発</simpara>
+</listitem>
+<listitem>
+<simpara>ブリッジ (8章): レガシーなネットワークとOpenFlowネットワークのブリッジ</simpara>
+</listitem>
+<listitem>
+<simpara>ファイアウォール (9章): 透過型ファイアウォール</simpara>
+</listitem>
+<listitem>
+<simpara>ルータ (10章,11章): 基本的なレイヤ3スイッチ (ルータ)</simpara>
+</listitem>
+<listitem>
+<simpara>トポロジ (12章): 中規模〜大規模ネットワークのトポロジ検知</simpara>
+</listitem>
+<listitem>
+<simpara>ルーティングスイッチ (13章): 中規模〜大規模ネットワーク用の仮想レイヤ2スイッチ</simpara>
+</listitem>
+<listitem>
+<simpara>スライサブルスイッチ (14章): ルーティングスイッチに仮想ネットワーク機能を追加</simpara>
+</listitem>
+</itemizedlist>
+<simpara>まずは、OpenFlowプログラミングのためのフレームワーク、Tremaを改めて紹介します。</simpara>
+</section>
+<section xml:id="_tremaとは">
+<title>Tremaとは</title>
+<simpara>TremaはOpenFlowコントローラを開発するためのフリーソフトウェアです。GitHub上でオープンに開発しており、ライセンスはGPL2のフリーソフトウェアです。その強力な機能や使いやすさから、国内外の企業や大学および研究機関などで採用されています。</simpara>
+<simpara>Tremaの情報はおもに次のURLから入手できます。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>Tremaホームページ: <link xlink:href="https://trema.github.com/trema/">https://trema.github.com/trema/</link></simpara>
+</listitem>
+<listitem>
+<simpara>GitHubのプロジェクトページ: <link xlink:href="https://github.com/trema/">https://github.com/trema/</link></simpara>
+</listitem>
+<listitem>
+<simpara>メーリングリスト: <link xlink:href="http://groups.google.com/group/trema-dev/">http://groups.google.com/group/trema-dev/</link></simpara>
+</listitem>
+<listitem>
+<simpara>Twitterアカウント: <link xlink:href="https://twitter.com/trema_news">https://twitter.com/trema_news</link></simpara>
+</listitem>
+</itemizedlist>
+<simpara>Tremaの特徴は「プログラミングフレームワーク」をうたっていることです。いったいこれは何でしょうか?</simpara>
+<simpara>Webプログラミングを多少かじったことがあれば、プログラミングフレームワークと聞くとRuby on Rails <footnote><simpara><link xlink:href="http://rubyonrails.org/">http://rubyonrails.org/</link></simpara></footnote>を真っ先に思い浮かべるでしょう。Railsの登場以前、90年代半ばには原始的なCGIプログラミングがWeb開発の主流でした。HTTPプロトコルを意識した低レベルなコードをCやPerlで書かねばならず、ごく単純な掲示板サービスを作るのにも大量のコーディングが伴いました。しかし2000年代に入り、より生産性の高い開発手法 — プログラミングフレームワークによるアジャイル開発 — によって一気にWebサービスは「カンブリア爆発」を迎えました。Railsを代表とするWebプログラミングフレームワークは、HTTPプロトコルの詳細を抽象化した高レベルなAPIを提供します。また、RubyやPythonをはじめとするスクリプティング言語の採用や、開発全体をラップトップPC1台で完結できる数々の開発支援ツールの提供によって、生産性を劇的に向上しました。</simpara>
+<simpara>この流れをOpenFlow界にも吹き込んだのがTremaです。Tremaは「OpenFlow版Rails」を合言葉として、2011年に初のOpenFlowプログラミングフレームワークとして登場しました。開発言語にはRailsと同じくRubyを採用し、また高レベルなOpenFlow APIを提供することで、プログラマはごく短いコードでOpenFlowコントローラを実装できます。また強力なOpenFlow開発ツール群を提供することで、ソフトウェアテストを中心とした反復的で段階的なアジャイル開発を可能にします。</simpara>
+<simpara>こうした強力なツールの一つがTremaの仮想ネットワーク機能です。OpenFlowスイッチを持っていない開発者でも、Tremaを使えばラップトップPC一台の中に仮想的なOpenFlowネットワークを作り、そこで自分の開発したコントローラを実行できます。この「作ったものをすぐに実行できる」という利点は、生産性の向上だけでなくSDNやOpenFlowのような新しい技術の習得にもつながります。正しい理解のためには概念の理解に加えて実践、つまり実際に手を動かすことが欠かせないからです。</simpara>
+<simpara>ここからは実際にTremaを使ってOpenFlowコントローラを作り、そして動かしていきます。まずはTremaの実行環境をセットアップしましょう。</simpara>
+<note>
+<title>Tremaの由来は?</title>
+<simpara>Tremaの名前は、著者の一人がファンである「とれまレコード (<link xlink:href="http://www.fumiyatanaka.com/toremarecords/">http://www.fumiyatanaka.com/toremarecords/</link>) 」という大阪の小さなレコードレーベルの名前から来ています。とれまレコードのリリースする楽曲は国内よりもむしろ海外で人気があり、海外のクラブチャートにもよくランクインします。</simpara>
+<simpara>この「とれまレコード」の名前にも面白い由来があります。日本がバブルの頃、道路の「とまれ」という標示がよく「とれま」と間違えて描かれており、これに目をつけたレーベルオーナーが「とれまレコード」と名付けたのだそうです。そしてもともと、このありえないミスの原因は、バブル景気時代に急増した外国人労働者達が、日本語もままならないまま工事現場で働いていたということにあります。</simpara>
+<figure xml:id="trema_logo">
+<title>Tremaの公式ロゴ</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/openflow_framework_trema/trema_logo.png"/>
+</imageobject>
+<textobject><phrase>trema logo</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>この逸話にのっとって、Tremaの公式ロゴも<link linkend="trema_logo">図2-a</link>のとおり道路標識の写真になっています。ちなみに、こんな道路標識は日本中どこを探してもありません! 本書の編集者が画像編集ソフトで試しに作ってみたところ評判が良かったので、そのまま公式ロゴになりました。</simpara>
+</note>
+</section>
+<section xml:id="_trema実行環境のセットアップ">
+<title>Trema実行環境のセットアップ</title>
+<simpara>TremaはLinux用のソフトウェアです。次のLinuxディストリビューションでの動作を確認しています。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>Ubuntu (i386/amd64)</simpara>
+</listitem>
+<listitem>
+<simpara>Debian GNU/Linux (i386/amd64)</simpara>
+</listitem>
+</itemizedlist>
+<simpara>なお動作保証はしていませんが、CentOSやFedoraをはじめとするRedHat系Linuxディストリビューションでの動作も確認しています。</simpara>
+<simpara><literal>trema</literal> コマンドの実行には sudo 権限が必要です。あらかじめ、<literal>sudo</literal> を使って root 権限でコマンドを実行できるかどうか、<literal>sudo</literal> の設定ファイルを確認しておいてください。</simpara>
+<simpara><literal>sudo</literal> が正しく設定できることを確認したら、Tremaの実行に必要な次のソフトウェアをインストールします。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>Rubyインタプリタ : Tremaの実行にはRubyのバージョン2.0以降が必要です。Tremaを使ったコントローラの開発にもRubyを使います。</simpara>
+</listitem>
+<listitem>
+<simpara>Bundler (<link xlink:href="https://bundler.io/">https://bundler.io/</link>) : Rubyライブラリのインストーラです。bundlerを使ってTrema本体と実行に必要なライブラリをインストールします。</simpara>
+</listitem>
+<listitem>
+<simpara>Open vSwitch (<link xlink:href="http://openvswitch.org/">http://openvswitch.org/</link>) : OpenFlowに対応したソフトウェアスイッチの一種です。Tremaの仮想ネットワーク機能で使用します。</simpara>
+</listitem>
+</itemizedlist>
+<section xml:id="_rubyとbundlerのインストール">
+<title>RubyとBundlerのインストール</title>
+<simpara>Rubyのインストールには、RVM<footnote><simpara><link xlink:href="https://rvm.io/">https://rvm.io/</link></simpara></footnote>というRubyインストーラを使うのが手軽です。次のコマンドを実行すると、安定版のRubyを自動的にインストールしてくれます。</simpara>
+<screen>$ curl -sSL https://get.rvm.io | bash -s stable --ruby</screen>
+<simpara>Bundlerは次のコマンドでインストールできます。</simpara>
+<screen>$ gem install bundler</screen>
+<simpara>なお <literal>gem</literal> はRubyの標準ライブラリ形式 <literal>.gem</literal> をインストールするコマンドです。ここでは最新版のBundlerの <literal>.gem</literal> を自動的にダウンロードしてインストールしています。</simpara>
+</section>
+<section xml:id="_open_vswitchのインストール">
+<title>Open vSwitchのインストール</title>
+<simpara>Open vSwitchは <literal>apt-get</literal> で簡単にインストールできます。</simpara>
+<screen>$ sudo apt-get install openvswitch-switch</screen>
+<simpara>他のディストリビューションを使う場合は、コマンド名やパッケージ名を適宜読み替えてください。</simpara>
+<simpara>以上でTremaを使うための準備が整いました。それでは早速、入門の定番Hello, Worldを書いて実行してみましょう。</simpara>
+</section>
+</section>
+<section xml:id="_hello_trema_2">
+<title>Hello, Trema!</title>
+<simpara>「Hello Trema!」は最も簡単なOpenFlowコントローラです。その唯一の機能は、スイッチと接続し「Hello, 0xabc!(0xabcはスイッチのDatapath ID)」と表示するだけです。このように機能は単純ですが、そのソースコードはTremaでコントローラを作るのに必要な基本知識をすべて含んでいます。</simpara>
+<section xml:id="_hello_tremaを書く">
+<title>Hello Tremaを書く</title>
+<simpara>コントローラの実装はプロジェクト用ディレクトリを作ることから始めます。まずは次のように、「Hello Trema!」用の空のディレクトリhello_tremaと、ソースコード用ディレクトリhello_trema/libを <literal>mkdir -p</literal> コマンドで新たに作ってください。</simpara>
+<screen>$ mkdir -p hello_trema/lib
+$ cd hello_trema</screen>
+<section xml:id="_プロジェクトディレクトリの中身">
+<title>プロジェクトディレクトリの中身</title>
+<simpara>プロジェクトディレクトリには、コントローラに関連するすべてのファイルを置きます。コントローラのソースコードをはじめ、README.mdやLICENSEといったドキュメント類、コントローラの動作をテストするためのテストファイル、そして各種設定ファイルがここに入ります。</simpara>
+<simpara>プロジェクトディレクトリのお手本として、GitHubのtrema/hello_tremaリポジトリ(<link xlink:href="https://github.com/trema/hello_trema">https://github.com/trema/hello_trema</link>) を見てみましょう。このリポジトリは、標準的なRubyプロジェクトのファイル構成に従っています。次に主要なファイルを挙げます。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>README.md: メインのドキュメント</simpara>
+</listitem>
+<listitem>
+<simpara>LICENSE: 配布ライセンスの指定</simpara>
+</listitem>
+<listitem>
+<simpara>CHANGELOG.md: 開発履歴</simpara>
+</listitem>
+<listitem>
+<simpara>Gemfile: 必要なgemパッケージの定義</simpara>
+</listitem>
+<listitem>
+<simpara>Rakefile: 開発用タスク</simpara>
+</listitem>
+<listitem>
+<simpara>lib/: コントローラの実装</simpara>
+</listitem>
+<listitem>
+<simpara>features/: 受け入れテスト</simpara>
+</listitem>
+<listitem>
+<simpara>spec/: ユニットテスト</simpara>
+</listitem>
+<listitem>
+<simpara>tasks/: 開発用タスク定義</simpara>
+</listitem>
+</itemizedlist>
+<simpara>自分で作ったコントローラを公開する場合、このようなファイル構成にすることが求められます。</simpara>
+<note>
+<simpara>テスト関連のディレクトリ(features/, spec/, tasks/)の用途については、第7章「テスト駆動開発」で詳しく説明します。</simpara>
+</note>
+</section>
+<section xml:id="_コントローラ本体の実装">
+<title>コントローラ本体の実装</title>
+<simpara>エディタでhello_tremaディレクトリ内のlib/hello_trema.rbを開き次のRubyコードを入力してください。.rbはRubyプログラムの標準的な拡張子です。Rubyの文法は必要に応じておいおい説明しますので、もしわからなくても気にせずそのまま入力してください。</simpara>
+<formalpara>
+<title>lib/hello_world.rb</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered"># Hello World!
+class HelloTrema &lt; Trema::Controller
+  def start(_args)
+    logger.info 'Trema started.'
+  end
+
+  def switch_ready(datapath_id)
+    logger.info "Hello #{datapath_id.to_hex}!"
+  end
+end</programlisting>
+</para>
+</formalpara>
+</section>
+<section xml:id="_スイッチの定義">
+<title>スイッチの定義</title>
+<simpara>Hello Tremaの実行にはOpenFlowスイッチが1台必要です。さきほどインストールしたOpen vSwitchをHello Tremaコントローラに接続することにしましょう。次の設定ファイルtrema.confをエディタで作成してください。</simpara>
+<formalpara>
+<title>trema.conf</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered">vswitch { datapath_id 0xabc }</programlisting>
+</para>
+</formalpara>
+<simpara>この設定ファイルでは0xabcというDatapath IDを持つ1台のソフトウェアスイッチを定義しています。コントローラを実行する際にこの設定ファイルを指定することで、Open vSwitchを起動しコントローラに接続できます。</simpara>
+</section>
+<section xml:id="_tremaのインストール">
+<title>Tremaのインストール</title>
+<simpara>Hello Tremaの実行にはもちろんTremaが必要です。実行に必要なRubyのアプリケーションやライブラリを`Gemfile`というファイルに次のように書いておくと、Hello Trema専用の実行環境を自動的にセットアップできます。</simpara>
+<formalpara>
+<title>Gemfile</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered">source 'https://rubygems.org/' <co xml:id="CO1-1"/>
+
+gem ‘trema’<co xml:id="CO1-2"/></programlisting>
+</para>
+</formalpara>
+<calloutlist>
+<callout arearefs="CO1-1">
+<para>gemの取得元として標準的なhttps://rubygems.orgを指定します</para>
+</callout>
+<callout arearefs="CO1-2">
+<para>実行環境にTremaを追加します</para>
+</callout>
+</calloutlist>
+<simpara>次のコマンドを実行すると、Tremaの実行コマンドがbin/tremaにインストールされます。</simpara>
+<screen>$ bundle install --binstubs
+$ ./bin/trema --version
+trema version 0.5.1</screen>
+<simpara>実行に最低限必要なコードはこれだけです。それでは細かい部分は後で説明するとして「習うより慣れろ」でさっそく実行してみましょう。</simpara>
+</section>
+<section xml:id="_実行してみよう_trema_run">
+<title>実行してみよう(trema run)</title>
+<simpara>作成したコントローラは <literal>trema run</literal> コマンドですぐに実行できます。Rubyはインタプリタ言語なので、コンパイルの必要はありません。ターミナルで次のように入力すると、この世界一短いOpenFlowコントローラはフォアグラウンドプロセスとして起動し、画面に「Trema started」「Hello, 0xabc!」と出力します。</simpara>
+<screen>$ ./bin/trema run ./lib/hello_trema.rb -c trema.conf
+Trema started.
+Hello, 0xabc! <co xml:id="CO2-1"/>
+$</screen>
+<calloutlist>
+<callout arearefs="CO2-1">
+<para><literal>Ctrl + c</literal> でコントローラを終了</para>
+</callout>
+</calloutlist>
+<simpara>ここまで見てきたように、<literal>trema</literal> コマンドを使うと、とても簡単にコントローラを実行できます。<literal>trema</literal> コマンドには他にもいくつかの機能がありますので、ここで簡単に紹介しておきましょう。</simpara>
+</section>
+</section>
+</section>
+<section xml:id="_trema_コマンド">
+<title>trema コマンド</title>
+<simpara><literal>trema</literal> コマンドは Trema 唯一のコマンドラインツールであり、コントローラの起動やテストなどさまざまな用途に使います。</simpara>
+<simpara>たとえば先ほどの「Hello, Trema!」で見たように、<literal>trema run</literal> はコントローラを起動するためのコマンドです。起動したコントローラは OpenFlow スイッチと接続しメッセージをやりとりします。また、<literal>trema run</literal> コマンドは <literal>-c</literal> (<literal>--conf</literal>) オプションで仮想ネットワークを作ることもでき、作ったコントローラをこの仮想ネットワークの中でテストできます(<link linkend="trema_run_command">図2-1</link>)。</simpara>
+<figure xml:id="trema_run_command">
+<title>trema runコマンドの実行イメージ</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/openflow_framework_trema/trema_overview.png"/>
+</imageobject>
+<textobject><phrase>trema overview</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara><literal>trema</literal> コマンドは <literal>git</literal> や <literal>svn</literal> コマンドと似たコマンド体系を持っており、<literal>trema</literal> に続けて <literal>run</literal> などのサブコマンドを指定することでさまざまな機能を呼び出します。<literal>trema</literal> コマンドは Trema フレームワークにおける中心的なツールで、あらゆるコントローラ開発の出発点と言えます。こうしたコマンド体系を一般に「コマンドスイート」と呼びます。</simpara>
+<simpara>一般的なコマンドスイートと同じく、サブコマンドの一覧は <literal>trema help</literal> で表示できます。また、サブコマンド自体のヘルプは <literal>trema help [サブコマンド]</literal> で表示できます。以下に、<literal>trema help</literal> で表示されるサブコマンド一覧をざっと紹介しておきます。いくつかのサブコマンドはまだ使い方を紹介していませんが、続く章で説明しますので今は目を通すだけでかまいません。</simpara>
+<itemizedlist>
+<listitem>
+<simpara><literal>trema run</literal>
+ コントローラをフォアグラウンドで実行する。<literal>--daemonize</literal> (<literal>-d</literal>) オプションを付けることで、コントローラをバックグラウンド (デーモンモード) として実行できる</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema version</literal>
+ Trema のバージョンを表示する。<literal>trema --version</literal> と同じ</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema killall</literal>
+ バックグラウンドで起動している Trema プロセス全体を停止する</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema kill</literal>
+ 仮想ネットワーク内の指定したスイッチまたはスイッチポートを停止する</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema up</literal>
+ 仮想ネットワークの指定したスイッチまたはスイッチポートを再び有効にする章)</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema send_packets</literal>
+ 仮想ネットワーク内でテストパケットを送信する</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema show_stats</literal>
+ 仮想ネットワーク内の仮想ホストで送受信したパケットの統計情報を表示する○章)</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema reset_stats</literal>
+ 仮想ネットワーク内の仮想ホストで送受信したパケットの統計情報をリセットする(第○章)</simpara>
+</listitem>
+<listitem>
+<simpara><literal>trema dump_flows</literal>
+ 仮想ネットワーク内の仮想スイッチのフローテーブルを表示する</simpara>
+</listitem>
+</itemizedlist>
+<simpara>では、気になっていた Ruby の文法にそろそろ進みましょう。今後はたくさん Ruby を使いますが、その都度必要な文法を説明しますので心配はいりません。しっかりついてきてください。</simpara>
+</section>
+<section xml:id="_即席ruby入門">
+<title>即席Ruby入門</title>
+<simpara>Rubyを習得する一番の近道は、コードを構成する各要素の種類(品詞)を押さえることです。これは、外国語を習得するコツに近いものがあります。ただし外国語と違い、Rubyの構成要素にはその品詞を見分けるための視覚的なヒントがかならずあります。このためRubyのコードはずいぶんと読みやすくなっています。</simpara>
+<informaltable frame="all" rowsep="1" colsep="1">
+<tgroup cols="3">
+<colspec colname="col_1" colwidth="33*"/>
+<colspec colname="col_2" colwidth="33*"/>
+<colspec colname="col_3" colwidth="33*"/>
+<thead>
+<row>
+<entry align="left" valign="top">品詞</entry>
+<entry align="left" valign="top">視覚的ヒント</entry>
+<entry align="left" valign="top">例</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry align="left" valign="top"><simpara>定数</simpara></entry>
+<entry align="left" valign="top"><simpara>大文字で始まる</simpara></entry>
+<entry align="left" valign="top"><simpara>HelloTrema, Trema::Controller</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>インスタンス変数</simpara></entry>
+<entry align="left" valign="top"><simpara>@で始まる</simpara></entry>
+<entry align="left" valign="top"><simpara>@switches, @name</simpara></entry>
+</row>
+<row>
+<entry align="left" valign="top"><simpara>シンボル</simpara></entry>
+<entry align="left" valign="top"><simpara>:で始まる</simpara></entry>
+<entry align="left" valign="top"><simpara>:match, :actions</simpara></entry>
+</row>
+</tbody>
+</tgroup>
+</informaltable>
+<note>
+<simpara>インスタンス変数とシンボルの使いかたについては、後の章で詳しく説明します。</simpara>
+</note>
+<simpara>このように最初の文字を見れば、それがどんな品詞かすぐにわかります。たとえば、大文字で始まる名前はかならず定数です。品詞がわかれば、そのRubyコードがどんな構造かも見えてきます。これからそれぞれの品詞について簡単に説明しますが、最初からすべてが理解できなくとも構いません。しばらくすれば「Hello, Trema!」のあらゆる部分が識別できるようになっているはずです。</simpara>
+<section xml:id="_定数">
+<title>定数</title>
+<simpara><literal>HelloTrema</literal> や <literal>Trema::Controller</literal> など、大文字で始まる名前が定数です。Rubyの定数は英語や日本語といった自然言語における固有名詞にあたります。</simpara>
+<formalpara>
+<title>lib/hello_world.rb</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered"># Hello World!
+class HelloTrema &lt; Trema::Controller <co xml:id="CO3-1"/>
+  def start(_args)
+    logger.info 'Trema started.'
+  end
+
+  def switch_ready(datapath_id)
+    logger.info "Hello #{datapath_id.to_hex}!"
+  end
+end</programlisting>
+</para>
+</formalpara>
+<calloutlist>
+<callout arearefs="CO3-1">
+<para>この行の <literal>HelloTrema</literal> と <literal>Trema::Controller</literal> が定数</para>
+</callout>
+</calloutlist>
+<simpara>英語でも固有名詞は大文字で始めることになっています。たとえばTokyo Tower(東京タワー)もそうです。東京タワーは動かすことができませんし、何か別なものに勝手に変えることもできません。このように、固有名詞は時間とともに変化しないものを指します。そして固有名詞と同様、Rubyの定数は一度セットすると変更できません。もし変更しようとすると、次のように警告が出ます。</simpara>
+<screen>$ irb
+&gt; TokyoTower = "東京都港区芝公園4丁目2-8"
+&gt; TokyoTower = "増上寺の近く"
+(irb):2: warning: already initialized constant TokyoTower
+(irb):1: warning: previous definition of TokyoTower was here
+=&gt; "東京都港区芝公園4丁目2-8"</screen>
+<simpara><literal>class</literal> に続く定数はクラス定義です。「Hello, Trema!」の例では <literal>HelloTrema</literal> が定義されるクラス名です。「<literal>class</literal> +クラス名」から始まるクラス定義は、同じ字下げレベルの <literal>end</literal> までの範囲です。</simpara>
+<formalpara>
+<title>lib/hello_trema.rb</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered">class HelloTrema &lt; Trema::Controller <co xml:id="CO4-1"/>
+  def start(args)
+    logger.info "Trema started."
+  end
+
+  def switch_ready(datapath_id)
+    logger.info "Hello #{datapath_id.to_hex}!"
+  end
+end <co xml:id="CO4-2"/></programlisting>
+</para>
+</formalpara>
+<calloutlist>
+<callout arearefs="CO4-1">
+<para>HelloTremaクラス定義の始まり</para>
+</callout>
+<callout arearefs="CO4-2">
+<para>クラス定義の終わり</para>
+</callout>
+</calloutlist>
+<section xml:id="_コントローラクラスの継承">
+<title>コントローラクラスの継承</title>
+<simpara>Tremaではすべてのコントローラはクラスとして定義し、Tremaの提供する <literal>Trema::Controller</literal> クラスをかならず継承します。クラスを継承するには、<literal>class クラス名 &lt; 親クラス名</literal> と書きます.</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">class HelloTrema &lt; Trema::Controller <co xml:id="CO5-1"/>
+  ...
+end</programlisting>
+<calloutlist>
+<callout arearefs="CO5-1">
+<para><literal>Trema::Controller</literal> クラスを継承した <literal>HelloTrema</literal> クラスを定義</para>
+</callout>
+</calloutlist>
+<simpara><literal>Trema::Controller</literal> クラスを継承することで、コントローラに必要な基本機能が <literal>HelloTrema</literal> クラスにこっそりと追加されます。たとえば雑多な初期化などの裏仕事を <literal>Trema::Controller</literal> クラスが代わりにやってくれるわけです。</simpara>
+</section>
+</section>
+<section xml:id="_ハンドラの定義">
+<title>ハンドラの定義</title>
+<simpara>さて、こうして定義した <literal>HelloTrema</literal> クラスはどこから実行が始まるのでしょうか? Cで言う <literal>main()</literal> 関数に当たるものがどこにも見あたりません。</simpara>
+<simpara>その答はTremaの動作モデルであるイベントドリブンモデルにあります。Tremaのコントローラは、さまざまなOpenFlowイベントに反応するイベントハンドラメソッド(以下、ハンドラと呼びます)をまとめたクラスとして定義します。</simpara>
+<simpara>ハンドラの定義は <literal>def</literal> に続く名前から <literal>end</literal> までのブロックです。たとえば <literal>HelloTrema</literal> の例では <literal>start</literal> と <literal>switch_ready</literal> ハンドラを定義しています。</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">class HelloTrema &lt; Trema::Controller
+  def start(args) <co xml:id="CO6-1"/>
+    logger.info "Trema started."
+  end
+
+  def switch_ready(datapath_id) <co xml:id="CO6-2"/>
+    logger.info "Hello #{datapath_id.to_hex}!"
+  end
+end</programlisting>
+<calloutlist>
+<callout arearefs="CO6-1">
+<para><literal>start</literal> ハンドラの定義</para>
+</callout>
+<callout arearefs="CO6-2">
+<para><literal>switch_ready</literal> ハンドラの定義</para>
+</callout>
+</calloutlist>
+<simpara>それぞれのイベントハンドラは、対応するイベントが発生したときに自動的に呼び出されます。たとえば <literal>start</literal> ハンドラはコントローラの起動イベント発生時、つまり <literal>trema run</literal> でコントローラを起動したときに自動的に呼ばれます。また、Packet Inメッセージ(第3章)が到着したとき、もし <literal>packet_in</literal> ハンドラがコントローラクラスに定義されていれば、Tremaが <literal>packet_in</literal> ハンドラを自動的に呼びます。</simpara>
+<simpara>Tremaでよく使うイベントをリストアップしておきます。</simpara>
+<itemizedlist>
+<listitem>
+<simpara><literal>start</literal>
+ コントローラの起動時に呼ばれる</simpara>
+</listitem>
+<listitem>
+<simpara><literal>switch_ready</literal>
+ スイッチがコントローラに接続したときに呼ばれる</simpara>
+</listitem>
+<listitem>
+<simpara><literal>switch_disconnected</literal>
+ スイッチがコントローラから切断したときに呼ばれる(第4章)</simpara>
+</listitem>
+<listitem>
+<simpara><literal>packet_in</literal>
+ 未知のパケットが到着したというPacket Inメッセージ到着時に呼ばれる(第3章)</simpara>
+</listitem>
+<listitem>
+<simpara><literal>flow_removed</literal>
+ フローが消されたときのFlow Removedメッセージ到着時に呼ばれる(第6章)</simpara>
+</listitem>
+</itemizedlist>
+<note>
+<title>ハンドラの自動呼び出し</title>
+<simpara>「ハンドラメソッドを定義しただけで、なぜ自動的に呼び出せるんだろう?」と不思議に思う人もいるでしょう。コード中にどんなメソッドがあるか? というコンパイル時情報をプログラム自身が実行時に知るためには、言語処理系の助けが必要です。たとえばCではコンパイル時と実行時の間にはぶ厚いカーテンが引かれているので普通は無理です。</simpara>
+<simpara>Rubyではオブジェクトが自らの持つメソッドを実行時に調べることができます。これをイントロスペクション(リフレクションや自己反映計算などとも言う)と呼びます。たとえばPacket Inメッセージが到着したとき、コントローラはイントロスペクションして自分が <literal>packet_in</literal> メソッドを持っているかどうかを実行時に調べます。そしてもし見つかればそのメソッドを呼ぶというわけです。</simpara>
+<simpara>この仕組みは <literal>Trema::Controller</literal> クラスを継承したときに自動的にコントローラへ導入されます。</simpara>
+</note>
+</section>
+<section xml:id="_キーワード">
+<title>キーワード</title>
+<simpara>Rubyにはたくさんの組込みの語があり、それぞれに意味が与えられています。これらの語を変数として使ったり、自分の目的に合わせて意味を変えたりはできません。</simpara>
+<screen>alias and BEGIN begin break case class def defined do else elsif END
+end ensure false for if in module next nil not or redo rescue retry
+return self super then true undef unless until when while yield</screen>
+<simpara>このうち、「Hello, Trema!」では <literal>class</literal> と <literal>def</literal> そして <literal>end</literal> キーワードを使いました。先ほど説明したように、<literal>class</literal> キーワードは続く名前 (<literal>HelloTrema</literal>) のクラスを定義します。<literal>def</literal> キーワードは続く名前(<literal>start</literal>) のメソッドを定義します。</simpara>
+<simpara>この <literal>def</literal> や <literal>class</literal> で始まって <literal>end</literal> で終わる領域のことをブロックと呼びます。すべてのRubyプログラムはこのブロックがいくつか組み合わさったものです。</simpara>
+</section>
+<section xml:id="_スイッチの起動を捕捉する">
+<title>スイッチの起動を捕捉する</title>
+<simpara>新しくスイッチが起動すると <literal>switch_ready</literal> メソッドが起動します。</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">def switch_ready(dpid)
+  logger.info "Hello #{dpid.to_hex}!"
+end</programlisting>
+<simpara><literal>switch_ready</literal> メソッドでは、接続したスイッチのDatapath IDを16進形式(0xで始まる文字列)でログに出力します。</simpara>
+<note>
+<title>switch_readyの中身</title>
+<simpara>実は OpenFlow の仕様には <literal>switch_ready</literal> というメッセージは定義されていません。実は、これは Trema が独自に定義するイベントなのです。<literal>switch_ready</literal> の裏では<link linkend="switch_ready">図2-b</link>に示す一連の複雑な処理が行われていて、Trema がこの詳細をうまくカーペットの裏に隠してくれているというわけです。</simpara>
+<figure xml:id="switch_ready">
+<title>switch_ready イベントが起こるまで</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/openflow_framework_trema/switch_ready.png"/>
+</imageobject>
+<textobject><phrase>switch ready</phrase></textobject>
+</mediaobject>
+</figure>
+<simpara>最初に、スイッチとコントローラがしゃべる OpenFlow プロトコルが合っているか確認します。OpenFlow の Hello メッセージを使ってお互いにプロトコルのバージョンを知らせ、うまく会話できそうか判断します。</simpara>
+<simpara>次は、スイッチを識別するための Datapath ID の取得です。Datapath IDのようなスイッチ固有の情報は、スイッチに対して OpenFlow の Features Request メッセージを送ることで取得できます。成功した場合、Datapath IDやポート数などの情報が Features Reply メッセージに乗ってやってきます。</simpara>
+<simpara>最後にスイッチを初期化します。スイッチに以前の状態が残っているとコントローラが管理する情報と競合が起こるので、スイッチを初期化することでこれを避けます。</simpara>
+<simpara>これら一連の処理が終わると、ようやく <literal>switch_ready</literal> がコントローラに通知されるというわけです。</simpara>
+</note>
+<section xml:id="_datapath_idを16進形式にする">
+<title>Datapath IDを16進形式にする</title>
+<simpara><literal>to_hex</literal> は整数を16進形式の文字列に変換するメソッドです。<literal>switch_ready</literal> ハンドラの引数 <literal>dpid</literal> の値は64ビットの正の整数で、OpenFlowでは慣習的に <literal>0xfffb</literal> などと16進で表します。ターミナルやログに出力する場合には <literal>to_hex</literal> で16進形式に変換しておいたほうがよいでしょう。</simpara>
+</section>
+<section xml:id="_ログメッセージを出力する">
+<title>ログメッセージを出力する</title>
+<simpara>ログメッセージはログファイルに記録されます。コントローラをフォアグラウンドで実行する場合、つまり <literal>trema run</literal> に <literal>--daemonize</literal> または <literal>-d</literal> オプションを付けない場合にはターミナルにもログメッセージが出力されます。</simpara>
+<simpara>ログメッセージを出力するには、<literal>logger</literal> を使います。</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">def start(_args)
+  logger.info 'Trema started.'
+end</programlisting>
+<simpara><literal>logger</literal> はTrema標準のロガーで、ログメッセージの出力はこれを通じて行います。ログメッセージの重要度に応じて、<literal>critical</literal> (重要度 最高)から <literal>debug</literal> (重要度 最低)までの次の6種類のメソッドを選べます。</simpara>
+<itemizedlist>
+<listitem>
+<simpara><literal>critical</literal>: 回復不能なエラー</simpara>
+</listitem>
+<listitem>
+<simpara><literal>error</literal>: エラー</simpara>
+</listitem>
+<listitem>
+<simpara><literal>warn</literal>: 警告</simpara>
+</listitem>
+<listitem>
+<simpara><literal>notice</literal>: 注意が必要な情報</simpara>
+</listitem>
+<listitem>
+<simpara><literal>info</literal>: 通常レベルの情報</simpara>
+</listitem>
+<listitem>
+<simpara><literal>debug</literal>: デバッグ出力</simpara>
+</listitem>
+</itemizedlist>
+<simpara><literal>trema run</literal> のオプションでロギングレベルを指定できます。たとえば次のコードを実行するとしましょう。</simpara>
+<formalpara>
+<title>try_logging.rb</title>
+<para>
+<programlisting language="ruby" linenumbering="unnumbered"># ロギングレベルの確認用コード
+class TryLogging &lt; Trema::Controller
+  def start(_args)
+    logger.critical 'CRITICAL'
+    logger.error 'ERROR'
+    logger.warn 'WARN'
+    logger.notice 'NOTICE'
+    logger.info 'INFO'
+    logger.debug 'DEBUG'
+  end
+end</programlisting>
+</para>
+</formalpara>
+<simpara>このコードをたとえば次のようにロギングレベル <literal>notice</literal> で実行すると、<literal>info</literal> と <literal>debug</literal> メッセージは出力されません。</simpara>
+<screen>$ ./bin/trema run try_logging.rb --logging_level notice
+CRITICAL
+ERROR
+WARN
+NOTICE</screen>
+<simpara>ログファイルのデフォルトパスは <literal>/tmp/[コントローラのクラス名].log</literal> です。たとえばHelloTremaの場合には <literal>/tmp/HelloTrema.log</literal> になります。ログファイルの出力先ディレクトリを変更するには、<literal>trema run</literal> の <literal>--log_dir</literal> または <literal>-L</literal> オプションを指定します。たとえば次のようにすると、<literal>/var/log/HelloTrema.log</literal> が作られます。</simpara>
+<screen>$ ./bin/trema run try_logging.rb --log_dir /var/log/</screen>
+</section>
+<section xml:id="_文字列を連結する">
+<title>文字列を連結する</title>
+<simpara><literal>logger.info</literal> に渡している文字列中の <literal>#{}</literal> は、文字列内にRubyの式を組込みます。</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">logger.info "Hello #{dpid.to_hex}!"
+#=&gt; Hello 0xabc!</programlisting>
+<simpara>これは次のコードと同じです。</simpara>
+<programlisting language="ruby" linenumbering="unnumbered">logger.info 'Hello ' + dpid.to_hex + '!'
+#=&gt; Hello 0xabc!</programlisting>
+<simpara>どちらを使ってもかまいませんが、文字列を <literal>+</literal> でつなげすぎると最終的な出力がコードからはわかりにくくなることがあります。その場合、このように <literal>#{}</literal> で組み込んだほうがよいでしょう。</simpara>
+<simpara>これで「Hello, Trema!」の説明はおしまいです。Tremaで作るコントローラは基本的にこの「Hello, Trema!」と同じ構成をしています。つまり、これをベースにいくつか必要なハンドラメソッドを追加していけば、より複雑で実践的なコントローラも作れます。</simpara>
+</section>
+</section>
+</section>
+<section xml:id="_まとめ_2">
+<title>まとめ</title>
+<simpara>この章ではTremaの開発環境をセットアップし、すべてのコントローラのテンプレートとなる「Hello, Trema!」コントローラを書きました。この章で学んだことを簡単にまとめてから、より実用的なコントローラの開発に入っていくことにしましょう。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>コントローラはクラスとして定義し、<literal>Trema::Controller</literal> クラスを継承することでコントローラの基本機能を取り込む</simpara>
+</listitem>
+<listitem>
+<simpara>コントローラに機能を追加するには、各種イベントに対応するハンドラをコントローラクラスに定義する</simpara>
+</listitem>
+<listitem>
+<simpara>コントローラは <literal>trema run</literal> コマンドでコンパイルなしにすぐ実行できる</simpara>
+</listitem>
+<listitem>
+<simpara>仮想ネットワーク機能を使うと、OpenFlowスイッチを持っていなくてもコントローラを実行できる</simpara>
+</listitem>
+</itemizedlist>
+<simpara>これでTremaの基礎知識は充分身に付きました。次の章では、OpenFlowコントローラのためのマイクロベンチマークツール、cbenchを計測するためのコントローラを書きます。</simpara>
+</section>
+<section xml:id="_参考文献">
+<title>参考文献</title>
+<simpara>Rubyプログラミングが初めてという人達のために、この章では入門に役立つサイトや本をいくつか紹介します。</simpara>
+<itemizedlist>
+<listitem>
+<simpara>「Why’s (Poignant) Guide to Ruby」(<link xlink:href="http://mislav.uniqpath.com/poignant-guide/">http://mislav.uniqpath.com/poignant-guide/</link>)
+ 筆者は大学や職場でいろいろなプログラミング言語を勉強してきましたが、これほど読んでいて楽しい本に出会ったことはありません。この本はRuby会の謎の人物_why氏による風変わりなRuby入門で、プログラミング言語の解説書にもかかわらずまるで小説やマンガのようにリラックスして読めます。この章のRubyの品詞の説明は、この本を参考にしました(日本語版はhttp://www.aoky.net/articles/why_poignant_guide_to_ruby/)</simpara>
+</listitem>
+<listitem>
+<simpara>「TryRuby」(<link xlink:href="http://tryruby.org/">http://tryruby.org/</link>)
+ 同じく_why氏による、ブラウザで動くRuby環境です。Rubyを試してみたいけどインストールするのが面倒という人は、まずはここでRubyを試してみましょう。<literal>help</literal> と打つと15分の短いRubyチュートリアルが始まります。</simpara>
+</listitem>
+<listitem>
+<simpara>『プログラミングRuby第2版』(Dave Thomas、Chad Fowler、Andrew Hunt著／田和勝、まつもとゆきひろ 訳／オーム社) 
+Rubyの完全なリファレンスです。本気でRubyを勉強したい人は持っていて損はしません。リファレンスが必要ならこの本だけあれば十分です。</simpara>
+</listitem>
+</itemizedlist>
+</section>
+</chapter>
+<appendix xml:id="_copyright_and_license">
+<title>Copyright and License</title>
+<simpara>This book is released under the GNU General Public License version 3.0:</simpara>
+<itemizedlist>
+<listitem>
+<simpara><link xlink:href="http://www.gnu.org/licenses/gpl-3.0.html">http://www.gnu.org/licenses/gpl-3.0.html</link></simpara>
+</listitem>
+</itemizedlist>
+</appendix>
+</book>
